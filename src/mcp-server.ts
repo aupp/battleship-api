@@ -243,6 +243,107 @@ server.tool(
   }
 );
 
+// Tool: Get realtime subscription instructions
+server.tool(
+  "get_realtime_instructions",
+  "Get code examples for subscribing to real-time game updates using Supabase Realtime. Useful for building clients that need live updates without polling.",
+  {
+    gameId: z.string().optional().describe("Optional game ID to include in the example filter"),
+    gameCode: z.string().optional().describe("Optional game code to include in the example filter"),
+  },
+  async ({ gameId, gameCode }) => {
+    const gameFilter = gameCode ? `code=eq.${gameCode}` : "code=eq.YOUR_GAME_CODE";
+    const playerFilter = gameId ? `game_id=eq.${gameId}` : "game_id=eq.YOUR_GAME_ID";
+
+    const instructions = `
+# Supabase Realtime Subscriptions for Battleship
+
+Clients can subscribe to live game updates instead of polling. This requires the Supabase client library.
+
+## Installation
+\`\`\`bash
+npm install @supabase/supabase-js
+\`\`\`
+
+## Setup
+\`\`\`javascript
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+\`\`\`
+
+## Subscribe to Game Updates
+Notifies when: game status changes, turn changes, winner declared
+\`\`\`javascript
+const gameSubscription = supabase
+  .channel('game-updates')
+  .on(
+    'postgres_changes',
+    {
+      event: '*',
+      schema: 'public',
+      table: 'games',
+      filter: '${gameFilter}'
+    },
+    (payload) => {
+      console.log('Game updated:', payload.new);
+      // payload.new contains: { id, code, status, current_turn, winner, created_at }
+    }
+  )
+  .subscribe();
+\`\`\`
+
+## Subscribe to Player Updates
+Notifies when: opponent joins, ships placed, shots fired
+\`\`\`javascript
+const playerSubscription = supabase
+  .channel('player-updates')
+  .on(
+    'postgres_changes',
+    {
+      event: '*',
+      schema: 'public',
+      table: 'players',
+      filter: '${playerFilter}'
+    },
+    (payload) => {
+      console.log('Player updated:', payload.new);
+      // payload.new contains: { id, game_id, player_number, name, ready, shots }
+      // Note: 'board' contains ship positions - don't expose opponent's board!
+    }
+  )
+  .subscribe();
+\`\`\`
+
+## Cleanup
+\`\`\`javascript
+// When leaving the game
+await gameSubscription.unsubscribe();
+await playerSubscription.unsubscribe();
+\`\`\`
+
+## Events Reference
+| Table   | Event  | Trigger                                    |
+|---------|--------|--------------------------------------------|
+| games   | UPDATE | Status/turn/winner changes                 |
+| players | INSERT | Opponent joined                            |
+| players | UPDATE | Ships placed (ready=true) or shots updated |
+`;
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: instructions,
+        },
+      ],
+    };
+  }
+);
+
 // Start server
 async function main() {
   const transport = new StdioServerTransport();

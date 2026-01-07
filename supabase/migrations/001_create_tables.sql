@@ -26,3 +26,7 @@ CREATE INDEX idx_games_code ON games(code);
 
 -- Index for token lookups
 CREATE INDEX idx_players_token ON players(token);
+
+-- Enable realtime subscriptions
+ALTER PUBLICATION supabase_realtime ADD TABLE games;
+ALTER PUBLICATION supabase_realtime ADD TABLE players;

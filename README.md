@@ -263,6 +263,72 @@ Response:
 
 ---
 
+## Realtime Subscriptions
+
+Clients can subscribe to game updates in real-time using Supabase Realtime. This is useful for:
+- Knowing when an opponent joins the game
+- Knowing when an opponent places their ships
+- Getting notified when it's your turn
+- Receiving shot results without polling
+
+### Client Example (JavaScript)
+
+```javascript
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Subscribe to game updates
+const gameSubscription = supabase
+  .channel('game-updates')
+  .on(
+    'postgres_changes',
+    {
+      event: '*',
+      schema: 'public',
+      table: 'games',
+      filter: `code=eq.${gameCode}`
+    },
+    (payload) => {
+      console.log('Game updated:', payload.new);
+      // Handle status changes, turn changes, winner
+    }
+  )
+  .subscribe();
+
+// Subscribe to player updates (shots fired, ships placed)
+const playerSubscription = supabase
+  .channel('player-updates')
+  .on(
+    'postgres_changes',
+    {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'players',
+      filter: `game_id=eq.${gameId}`
+    },
+    (payload) => {
+      console.log('Player updated:', payload.new);
+      // Handle opponent ready status, new shots
+    }
+  )
+  .subscribe();
+
+// Cleanup when done
+gameSubscription.unsubscribe();
+playerSubscription.unsubscribe();
+```
+
+### Events to Watch
+
+| Table | Event | Use Case |
+|-------|-------|----------|
+| `games` | UPDATE | Status changes (waiting→placing→playing→finished), turn changes, winner |
+| `players` | UPDATE | Opponent ready (ships placed), new shots fired |
+| `players` | INSERT | Opponent joined the game |
+
+---
+
 ## MCP Server
 
 The MCP server exposes the Battleship API as tools for AI coding agents.
@@ -276,6 +342,7 @@ The MCP server exposes the Battleship API as tools for AI coding agents.
 | `get_game_state` | Get current state | `playerToken` |
 | `place_ships` | Place ships on board | `playerToken`, `ships` |
 | `fire` | Fire at coordinate | `playerToken`, `x`, `y` |
+| `get_realtime_instructions` | Get code for live subscriptions | `gameId?`, `gameCode?` |
 
 ### Configuration
 
