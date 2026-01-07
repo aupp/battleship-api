@@ -42,11 +42,11 @@ jobs:
       - name: Build and push Docker image
         id: build
         run: |
-          IMAGE_TAG="${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/battleship/battleship:${{ github.sha }}"
+          IMAGE_TAG="${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/battleship-api/battleship:${{ github.sha }}"
           docker build -t $IMAGE_TAG .
-          docker tag $IMAGE_TAG ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/battleship/battleship:latest
+          docker tag $IMAGE_TAG ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/battleship-api/battleship:latest
           docker push $IMAGE_TAG
-          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/battleship/battleship:latest
+          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/battleship-api/battleship:latest
           echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
   deploy-api:
