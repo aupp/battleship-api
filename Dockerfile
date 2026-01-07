@@ -21,6 +21,10 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
+# Default to REST API, can be overridden to "mcp" for MCP HTTP server
+ENV SERVER_TYPE=api
+
 EXPOSE 8080
 
-CMD ["node", "dist/index.js"]
+# Use shell form to allow variable substitution
+CMD if [ "$SERVER_TYPE" = "mcp" ]; then node dist/mcp-http.js; else node dist/index.js; fi

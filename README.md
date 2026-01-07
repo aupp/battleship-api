@@ -331,7 +331,10 @@ playerSubscription.unsubscribe();
 
 ## MCP Server
 
-The MCP server exposes the Battleship API as tools for AI coding agents.
+The MCP server exposes the Battleship API as tools for AI coding agents. It supports two transport modes:
+
+- **stdio** - For local CLI usage
+- **HTTP/SSE** - For remote access over the network
 
 ### Tools
 
@@ -344,9 +347,37 @@ The MCP server exposes the Battleship API as tools for AI coding agents.
 | `fire` | Fire at coordinate | `playerToken`, `x`, `y` |
 | `get_realtime_instructions` | Get code for live subscriptions | `gameId?`, `gameCode?` |
 
+### Running the MCP Server
+
+**Local (stdio mode):**
+```bash
+npm run mcp
+```
+
+**HTTP mode (for remote access):**
+```bash
+npm run mcp:http
+# Server runs on port 3001 (or PORT/MCP_PORT env var)
+```
+
+### Streamable HTTP Endpoints
+
+When running in HTTP mode, the server exposes:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/mcp` | POST | Client-to-server messages (JSON-RPC) |
+| `/mcp` | GET | Server-to-client SSE stream |
+| `/mcp` | DELETE | Terminate session |
+
+The `/mcp` endpoint uses the MCP Streamable HTTP transport (protocol version 2025-11-25) with session management via `MCP-Session-Id` header.
+
 ### Configuration
 
-Add to your Claude Code settings (`~/.claude/settings.json`):
+**Option 1: Local stdio (Claude Code settings)**
+
+Add to `~/.claude/settings.json`:
 
 ```json
 {
@@ -363,7 +394,16 @@ Add to your Claude Code settings (`~/.claude/settings.json`):
 }
 ```
 
-Or for a project-specific config (`.claude/settings.local.json`):
+**Option 2: Remote Streamable HTTP**
+
+For MCP clients that support Streamable HTTP transport, connect to:
+```
+MCP URL: https://your-mcp-server.run.app/mcp
+```
+
+**Option 3: Project-specific config**
+
+Add to `.claude/settings.local.json`:
 
 ```json
 {
@@ -417,13 +457,16 @@ fire(playerToken: "token2", x: 0, y: 0)
 | `npm run dev` | Development server with hot reload |
 | `npm run build` | Compile TypeScript |
 | `npm start` | Run REST API server |
-| `npm run mcp` | Run MCP server |
+| `npm run mcp` | Run MCP server (stdio) |
+| `npm run mcp:http` | Run MCP server (HTTP/SSE) |
 
 ## Deployment (Google Cloud Run)
 
-The REST API can be deployed to Google Cloud Run using the included GitHub Actions workflow.
+Both the REST API and MCP HTTP server can be deployed to Google Cloud Run using the included GitHub Actions workflow.
 
-> **Note:** The MCP server uses stdio transport and runs locally - it cannot be deployed to Cloud Run.
+The workflow deploys two services:
+- `battleship-api` - REST API server
+- `battleship-mcp` - MCP HTTP/SSE server
 
 ### Prerequisites
 
@@ -441,7 +484,7 @@ The REST API can be deployed to Google Cloud Run using the included GitHub Actio
    ```bash
    gcloud artifacts repositories create battleship-api \
      --repository-format=docker \
-     --location=us-central1
+     --location=europe-north2
    ```
 
 4. Store Supabase secrets in Secret Manager:
@@ -459,13 +502,14 @@ The REST API can be deployed to Google Cloud Run using the included GitHub Actio
      --display-name="GitHub Actions Pool"
    ```
 
-2. Create a Workload Identity Provider:
+2. Create a Workload Identity Provider (replace `YOUR_GITHUB_USERNAME/battleship-api` with your repo):
    ```bash
    gcloud iam workload-identity-pools providers create-oidc "github-provider" \
      --location="global" \
      --workload-identity-pool="github-pool" \
      --display-name="GitHub Provider" \
      --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
+     --attribute-condition="assertion.repository=='YOUR_GITHUB_USERNAME/battleship-api'" \
      --issuer-uri="https://token.actions.githubusercontent.com"
    ```
 
@@ -512,7 +556,7 @@ Add these to your GitHub repository:
 
 **Variables** (Settings → Secrets and variables → Actions → Variables):
 - `GCP_PROJECT_ID`: Your Google Cloud project ID
-- `GCP_REGION`: Deployment region (default: `us-central1`)
+- `GCP_REGION`: Deployment region (default: `europe-north2`)
 
 **Secrets** (Settings → Secrets and variables → Actions → Secrets):
 - `WIF_PROVIDER`: `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider`

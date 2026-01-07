@@ -9,16 +9,18 @@ on:
 env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: ${{ vars.GCP_REGION || 'us-central1' }}
-  SERVICE_NAME: battleship-api
   ARTIFACT_REGISTRY: ${{ vars.GCP_REGION || 'us-central1' }}-docker.pkg.dev
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
 
     permissions:
       contents: read
       id-token: write
+
+    outputs:
+      image_tag: ${{ steps.build.outputs.image_tag }}
 
     steps:
       - name: Checkout code
@@ -37,25 +39,40 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
 
-      - name: Build Docker image
+      - name: Build and push Docker image
+        id: build
         run: |
-          docker build -t ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }} .
-          docker tag ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
-            ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}/${{ env.SERVICE_NAME }}:latest
+          IMAGE_TAG="${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/battleship/battleship:${{ github.sha }}"
+          docker build -t $IMAGE_TAG .
+          docker tag $IMAGE_TAG ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/battleship/battleship:latest
+          docker push $IMAGE_TAG
+          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/battleship/battleship:latest
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      - name: Push Docker image
-        run: |
-          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
-          docker push ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}/${{ env.SERVICE_NAME }}:latest
+  deploy-api:
+    needs: build
+    runs-on: ubuntu-latest
 
-      - name: Deploy to Cloud Run
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Deploy REST API to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: ${{ env.SERVICE_NAME }}
+          service: battleship-api
           region: ${{ env.REGION }}
-          image: ${{ env.ARTIFACT_REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          image: ${{ needs.build.outputs.image_tag }}
           env_vars: |
             NODE_ENV=production
+            SERVER_TYPE=api
           secrets: |
             SUPABASE_URL=SUPABASE_URL:latest
             SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest
@@ -65,7 +82,45 @@ jobs:
             --min-instances=0
             --max-instances=10
 
-      - name: Show deployment URL
+      - name: Show API deployment URL
         run: |
-          echo "Service deployed to:"
-          gcloud run services describe ${{ env.SERVICE_NAME }} --region ${{ env.REGION }} --format 'value(status.url)'
+          echo "REST API deployed to:"
+          gcloud run services describe battleship-api --region ${{ env.REGION }} --format 'value(status.url)'
+
+  deploy-mcp:
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Deploy MCP Server to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: battleship-mcp
+          region: ${{ env.REGION }}
+          image: ${{ needs.build.outputs.image_tag }}
+          env_vars: |
+            NODE_ENV=production
+            SERVER_TYPE=mcp
+          secrets: |
+            SUPABASE_URL=SUPABASE_URL:latest
+            SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest
+          flags: |
+            --port=8080
+            --allow-unauthenticated
+            --min-instances=0
+            --max-instances=10
+
+      - name: Show MCP deployment URL
+        run: |
+          echo "MCP Server deployed to:"
+          gcloud run services describe battleship-mcp --region ${{ env.REGION }} --format 'value(status.url)'
