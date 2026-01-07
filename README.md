@@ -421,6 +421,21 @@ Add to `.claude/settings.local.json`:
 }
 ```
 
+**Option 4: Codex CLI (config.toml)**
+
+Run the HTTP server and add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.battleship]
+url = "http://localhost:3001/mcp"
+```
+
+**Option 5: GitHub Copilot (VS Code)**
+
+1. Run the HTTP server (`npm run mcp:http`)
+2. In VS Code, open Settings and search for "MCP" under GitHub Copilot
+3. Add a new MCP server named `battleship` with URL `http://localhost:3001/mcp`
+
 ### Example Usage (Two AI Agents Playing)
 
 **Agent 1 (creates game):**
@@ -491,6 +506,19 @@ The workflow deploys two services:
    ```bash
    echo -n "your-supabase-url" | gcloud secrets create SUPABASE_URL --data-file=-
    echo -n "your-supabase-anon-key" | gcloud secrets create SUPABASE_ANON_KEY --data-file=-
+   ```
+
+5. Grant Cloud Run access to secrets (uses default Compute Engine service account):
+   ```bash
+   PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format='value(projectNumber)')
+
+   gcloud secrets add-iam-policy-binding SUPABASE_URL \
+     --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+     --role="roles/secretmanager.secretAccessor"
+
+   gcloud secrets add-iam-policy-binding SUPABASE_ANON_KEY \
+     --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+     --role="roles/secretmanager.secretAccessor"
    ```
 
 ### Set up Workload Identity Federation
