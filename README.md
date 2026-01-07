@@ -419,6 +419,109 @@ fire(playerToken: "token2", x: 0, y: 0)
 | `npm start` | Run REST API server |
 | `npm run mcp` | Run MCP server |
 
+## Deployment (Google Cloud Run)
+
+The REST API can be deployed to Google Cloud Run using the included GitHub Actions workflow.
+
+> **Note:** The MCP server uses stdio transport and runs locally - it cannot be deployed to Cloud Run.
+
+### Prerequisites
+
+1. A Google Cloud project with billing enabled
+2. Enable required APIs:
+   ```bash
+   gcloud services enable \
+     run.googleapis.com \
+     artifactregistry.googleapis.com \
+     secretmanager.googleapis.com \
+     iamcredentials.googleapis.com
+   ```
+
+3. Create an Artifact Registry repository:
+   ```bash
+   gcloud artifacts repositories create battleship-api \
+     --repository-format=docker \
+     --location=us-central1
+   ```
+
+4. Store Supabase secrets in Secret Manager:
+   ```bash
+   echo -n "your-supabase-url" | gcloud secrets create SUPABASE_URL --data-file=-
+   echo -n "your-supabase-anon-key" | gcloud secrets create SUPABASE_ANON_KEY --data-file=-
+   ```
+
+### Set up Workload Identity Federation
+
+1. Create a Workload Identity Pool:
+   ```bash
+   gcloud iam workload-identity-pools create "github-pool" \
+     --location="global" \
+     --display-name="GitHub Actions Pool"
+   ```
+
+2. Create a Workload Identity Provider:
+   ```bash
+   gcloud iam workload-identity-pools providers create-oidc "github-provider" \
+     --location="global" \
+     --workload-identity-pool="github-pool" \
+     --display-name="GitHub Provider" \
+     --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository" \
+     --issuer-uri="https://token.actions.githubusercontent.com"
+   ```
+
+3. Create a Service Account and grant permissions:
+   ```bash
+   gcloud iam service-accounts create github-actions-sa \
+     --display-name="GitHub Actions Service Account"
+
+   # Grant necessary roles
+   PROJECT_ID=$(gcloud config get-value project)
+   SA_EMAIL="github-actions-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:${SA_EMAIL}" \
+     --role="roles/run.admin"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:${SA_EMAIL}" \
+     --role="roles/artifactregistry.writer"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:${SA_EMAIL}" \
+     --role="roles/secretmanager.secretAccessor"
+
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:${SA_EMAIL}" \
+     --role="roles/iam.serviceAccountUser"
+   ```
+
+4. Allow GitHub Actions to impersonate the Service Account:
+   ```bash
+   PROJECT_ID=$(gcloud config get-value project)
+   REPO="your-github-username/battleship-api"
+
+   gcloud iam service-accounts add-iam-policy-binding \
+     "github-actions-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+     --role="roles/iam.workloadIdentityUser" \
+     --member="principalSet://iam.googleapis.com/projects/$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')/locations/global/workloadIdentityPools/github-pool/attribute.repository/${REPO}"
+   ```
+
+### Configure GitHub Repository
+
+Add these to your GitHub repository:
+
+**Variables** (Settings → Secrets and variables → Actions → Variables):
+- `GCP_PROJECT_ID`: Your Google Cloud project ID
+- `GCP_REGION`: Deployment region (default: `us-central1`)
+
+**Secrets** (Settings → Secrets and variables → Actions → Secrets):
+- `WIF_PROVIDER`: `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider`
+- `WIF_SERVICE_ACCOUNT`: `github-actions-sa@PROJECT_ID.iam.gserviceaccount.com`
+
+### Deploy
+
+Push to `main` branch to trigger automatic deployment, or manually trigger via GitHub Actions.
+
 ## License
 
 ISC
