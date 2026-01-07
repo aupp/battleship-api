@@ -13,8 +13,40 @@ npm install
 ### 2. Configure Supabase
 
 1. Create a [Supabase](https://supabase.com) project
-2. Run the migration in `supabase/migrations/001_create_tables.sql`
-3. Copy `.env.example` to `.env` and add your credentials:
+
+2. Run the database migration using one of these methods:
+
+   **Option A: Supabase Dashboard (Easiest)**
+   - Go to your project's [SQL Editor](https://supabase.com/dashboard/project/_/sql)
+   - Copy the contents of `supabase/migrations/001_create_tables.sql`
+   - Paste into the SQL Editor and click "Run"
+
+   **Option B: Supabase CLI**
+   ```bash
+   # Install Supabase CLI if not already installed
+   npm install -g supabase
+
+   # Login to Supabase
+   supabase login
+
+   # Link to your project (find project ref in project settings)
+   supabase link --project-ref your-project-ref
+
+   # Push the migration
+   supabase db push
+   ```
+
+   **Option C: Direct psql connection**
+   ```bash
+   # Find your connection string in Supabase Dashboard > Settings > Database
+   psql "postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres" -f supabase/migrations/001_create_tables.sql
+   ```
+
+3. Get your API credentials from Supabase Dashboard > Settings > API:
+   - `SUPABASE_URL`: Project URL
+   - `SUPABASE_ANON_KEY`: anon/public key
+
+4. Copy `.env.example` to `.env` and add your credentials:
 
 ```bash
 cp .env.example .env
@@ -22,7 +54,7 @@ cp .env.example .env
 
 ```env
 PORT=3000
-SUPABASE_URL=your_supabase_project_url
+SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
